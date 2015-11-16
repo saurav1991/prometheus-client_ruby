@@ -1,6 +1,7 @@
 # encoding: UTF-8
 
 require 'prometheus/client'
+require "pstore"
 
 module Prometheus
   module Client
@@ -14,6 +15,7 @@ module Prometheus
         def initialize(app, options = {}, &label_builder)
           @app = app
           @registry = options[:registry] || Client.registry
+          @persist = options[:persist]
           @label_builder = label_builder || DEFAULT_LABEL_BUILDER
 
           init_request_metrics
@@ -61,6 +63,28 @@ module Prometheus
         rescue => exception
           @exceptions.increment(exception: exception.class.name)
           raise
+        ensure
+          persist_metrics if @persist
+        end
+
+        def persist_metrics
+          pid = Process.pid
+          store_dir = "#{Dir.tmpdir()}/prometheus-#{Process.ppid}"
+          store_file = "#{store_dir}/metrics-#{pid}.pstore"
+          FileUtils.mkdir_p(store_dir)
+
+          store = PStore.new(store_file)
+          
+          store.transaction do
+            @registry.metrics.each do |metric|
+              store[metric.name] = {
+                type: metric.type,
+                docstring: metric.docstring,
+                base_labels: metric.base_labels,
+                values: Hash[metric.values.map{|k,v| [k.merge(pid:pid), v]}],
+              }
+            end
+          end
         end
 
         def labels(env, response)

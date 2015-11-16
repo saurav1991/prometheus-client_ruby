@@ -2,6 +2,7 @@
 
 require 'prometheus/client'
 require 'prometheus/client/formats/text'
+require 'prometheus/client/aggregate_registry'
 
 module Prometheus
   module Client
@@ -17,6 +18,8 @@ module Prometheus
         def initialize(app, options = {})
           @app = app
           @registry = options[:registry] || Client.registry
+          @persist = options[:persist]
+          @registry = AggregateRegistry.new if @persist
           @path = options[:path] || '/metrics'
           @acceptable = build_dictionary(FORMATS, FALLBACK)
         end
@@ -62,6 +65,7 @@ module Prometheus
         end
 
         def respond_with(format)
+          @registry.scan
           [
             200,
             { 'Content-Type' => format::CONTENT_TYPE },
