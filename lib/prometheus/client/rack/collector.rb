@@ -67,21 +67,32 @@ module Prometheus
           persist_metrics if @persist
         end
 
-        def persist_metrics
-          pid = Process.pid
+        def store
+          return @store if @store
           store_dir = "#{Dir.tmpdir()}/prometheus-#{Process.ppid}"
           store_file = "#{store_dir}/metrics-#{pid}.pstore"
           FileUtils.mkdir_p(store_dir)
 
-          store = PStore.new(store_file)
-          
+          @store = PStore.new(store_file)
+
+          # Remove the store when the process exits
+          at_exit { File.delete(store_file) }
+          @store
+        end
+
+        def pid
+          @pid ||= Process.pid
+          @pid
+        end
+
+        def persist_metrics
           store.transaction do
             @registry.metrics.each do |metric|
               store[metric.name] = {
                 type: metric.type,
                 docstring: metric.docstring,
                 base_labels: metric.base_labels,
-                values: Hash[metric.values.map{|k,v| [k.merge(pid:pid), v]}],
+                values: Hash[metric.values.map{|k,v| [k.merge(pid: pid), v]}],
               }
             end
           end

@@ -28,28 +28,6 @@ module Prometheus
             h[k] = v
           end
         end
-        # first_instance[:values]
-        # aggregate_values = @aggregate_registry.values(@name)
-        # case type
-        # when :counter
-        #   aggregate_values.each_with_object({}) do |values, h|
-        #     values.each do |k,v|
-        #       h[k] ||= 0
-        #       h[k] += v
-        #     end
-        #   end
-        # when :gauge
-        #   aggregate_values.each_with_object({}) do |values, h|
-        #     values.each do |k,v|
-        #       h[k] ||= []
-        #       h[k] << v
-        #     end
-        #   end.each_with_object({}) do |(k,v), h|
-        #     h[k] = (v.inject(:+) / v.length)
-        #   end
-        # else
-        #   return {}
-        # end
       end
 
       private
