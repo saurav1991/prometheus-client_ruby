@@ -1,7 +1,7 @@
 # encoding: UTF-8
 
 require 'prometheus/client'
-require "pstore"
+require 'gdbm'
 
 module Prometheus
   module Client
@@ -70,13 +70,17 @@ module Prometheus
         def store
           return @store if @store
           store_dir = "#{Dir.tmpdir()}/prometheus-#{Process.ppid}"
-          store_file = "#{store_dir}/metrics-#{pid}.pstore"
+          store_file = "#{store_dir}/metrics-#{pid}.gdbm"
           FileUtils.mkdir_p(store_dir)
 
-          @store = PStore.new(store_file)
+          @store = GDBM.new(store_file, 0660, GDBM::NOLOCK)
 
           # Remove the store when the process exits
-          at_exit { File.delete(store_file) }
+          at_exit do
+            @store.close
+            File.delete(store_file)
+          end
+
           @store
         end
 
@@ -86,15 +90,13 @@ module Prometheus
         end
 
         def persist_metrics
-          store.transaction do
-            @registry.metrics.each do |metric|
-              store[metric.name] = {
-                type: metric.type,
-                docstring: metric.docstring,
-                base_labels: metric.base_labels,
-                values: Hash[metric.values.map{|k,v| [k.merge(pid: pid), v]}],
-              }
-            end
+          @registry.metrics.each do |metric|
+            store[Marshal.dump(metric.name)] = Marshal.dump({
+              type: metric.type,
+              docstring: metric.docstring,
+              base_labels: metric.base_labels,
+              values: Hash[metric.values.map{|k,v| [k.merge(pid: pid), v]}],
+            })
           end
         end
 
