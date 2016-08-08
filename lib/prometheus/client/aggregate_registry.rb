@@ -1,4 +1,4 @@
-require 'gdbm'
+require 'pstore'
 
 module Prometheus
   module Client
@@ -34,6 +34,7 @@ module Prometheus
 
       def first_instance
         @first_instance ||= @aggregate_registry.first_instance(@name)
+        @first_instance
       end
       
     end
@@ -44,16 +45,18 @@ module Prometheus
 
       def scan
         store_dir = "#{Dir.tmpdir()}/prometheus-#{Process.ppid}"
-        @files = Dir["#{store_dir}/**/*.gdbm"]
+        @files = Dir["#{store_dir}/**/*.pstore"]
         @names = []
         get_names
       end
 
       def get_names
         @files.each do |file|
-          store = GDBM.new(file, 0600, GDBM::READER)
-          store.keys.each do |key|
-            @names << Marshal.load(key)
+          store = PStore.new(file)
+          store.transaction(true) do
+            store.roots.each do |root_name| # might not need to loop here, store.roots.values or something
+              @names << root_name
+            end
           end
         end
 
@@ -66,9 +69,10 @@ module Prometheus
 
       def first_instance(name)
         @files.each do |file|
-          store = GDBM.new(file, 0600, GDBM::READER)
-          val = store[Marshal.dump(name)]
-          return Marshal.load(val) if val
+          store = PStore.new(file)
+          store.transaction(true) do
+            return store[name] if store[name]
+          end
         end
 
         return nil
@@ -78,13 +82,13 @@ module Prometheus
         values = []
 
         @files.each do |file|
-          store = GDBM.new(file, 0600, GDBM::READER)
-          data = Marshal.load(store[Marshal.dump(name)])
-          next unless data
-          values << data[:values]
+          store = PStore.new(file)
+          store.transaction(true) do
+            values << store[name][:values] if store[name] && store[name][:values]
+          end
         end
         
-        values.compact
+        values
       end
     end
   end
